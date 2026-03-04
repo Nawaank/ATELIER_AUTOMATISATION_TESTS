@@ -30,7 +30,6 @@ def test_api():
 
     with open("results.json", "a") as f:
         f.write(json.dumps(result) + "\n")
-
     return result
 
 @app.route("/")
@@ -53,11 +52,33 @@ def dashboard():
     ) if success > 0 else 0
     availability = round((success / total) * 100, 2) if total > 0 else 0
 
-    # Graphique des 20 derniers temps de réponse
+    # Tableau des 10 derniers tests
+    table_rows = "".join(
+        f"<tr><td>{d['timestamp']}</td><td>{d['status_code']}</td><td>{d['response_time_ms'] or '-'}</td></tr>"
+        for d in data[-10:]
+    )
+    table_html = f"<table><tr><th>Timestamp</th><th>Status</th><th>Response Time (ms)</th></tr>{table_rows}</table>"
+
+    # Graphique temps de réponse et camembert
     timestamps = [d['timestamp'] for d in data[-20:]]
     response_times = [d['response_time_ms'] or 0 for d in data[-20:]]
 
     return f"""
+    <html>
+    <head>
+    <title>API Monitoring - Open Meteo</title>
+    <style>
+    body {{ font-family: Arial; background-color: #f4f4f9; color: #333; }}
+    h1 {{ color: #2c3e50; }}
+    table {{ border-collapse: collapse; width: 80%; margin-top: 20px; }}
+    th, td {{ padding: 8px 12px; text-align: center; }}
+    th {{ background-color: #2c3e50; color: white; }}
+    tr:nth-child(even) {{ background-color: #e9ecef; }}
+    canvas {{ margin: 20px 0; }}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body>
     <h1>API Monitoring - Open Meteo</h1>
     <p>Total tests: {total}</p>
     <p>Success: {success}</p>
@@ -67,11 +88,12 @@ def dashboard():
     <canvas id="chart" width="600" height="300"></canvas>
     <canvas id="pie" width="300" height="300"></canvas>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <h2>Derniers tests</h2>
+    {table_html}
+
     <script>
-    // Ligne temps de réponse
     const ctx = document.getElementById('chart').getContext('2d');
-    const chart = new Chart(ctx, {{
+    new Chart(ctx, {{
         type: 'line',
         data: {{
             labels: {timestamps},
@@ -83,13 +105,10 @@ def dashboard():
             }}]
         }},
         options: {{
-            scales: {{
-                y: {{ beginAtZero: true }}
-            }}
+            scales: {{ y: {{ beginAtZero: true }} }}
         }}
     }});
 
-    // Camembert succès/échec
     const pieCtx = document.getElementById('pie').getContext('2d');
     new Chart(pieCtx, {{
         type: 'pie',
@@ -102,4 +121,6 @@ def dashboard():
         }}
     }});
     </script>
+    </body>
+    </html>
     """
