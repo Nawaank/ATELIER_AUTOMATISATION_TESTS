@@ -71,11 +71,11 @@ def dashboard():
     body {{ font-family: Arial; background-color: #f4f4f9; color: #333; text-align: center; }}
     h1 {{ color: #2c3e50; }}
     table {{ border-collapse: collapse; width: 80%; margin: 20px auto; }}
-    th, td {{ padding: 8px 12px; text-align: center; }}
+    th, td {{ padding: 6px 10px; text-align: center; font-size: 0.9em; }}
     th {{ background-color: #2c3e50; color: white; }}
     tr:nth-child(even) {{ background-color: #e9ecef; }}
-    .charts-container {{ display: flex; justify-content: center; gap: 40px; margin-top: 20px; flex-wrap: wrap; }}
-    canvas {{ background-color: #fff; border: 1px solid #ccc; }}
+    .charts-container {{ display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }}
+    canvas {{ background-color: #fff; border: 1px solid #ccc; width: 300px !important; height: 200px !important; }}
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
@@ -84,8 +84,8 @@ def dashboard():
     <p>Total tests: {total} | Success: {success} | Availability: {availability}% | Average response time: {avg_time} ms</p>
 
     <div class="charts-container">
-        <canvas id="chart" width="400" height="250"></canvas>
-        <canvas id="pie" width="400" height="250"></canvas>
+        <canvas id="chart"></canvas>
+        <canvas id="pie"></canvas>
     </div>
 
     <h2>Derniers tests</h2>
@@ -102,10 +102,13 @@ def dashboard():
                 data: {response_times},
                 borderColor: 'rgb(75, 192, 192)',
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                tension: 0.3
+                tension: 0.3,
+                pointRadius: 3
             }}]
         }},
         options: {{
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {{ y: {{ beginAtZero: true }} }}
         }}
     }});
@@ -119,6 +122,10 @@ def dashboard():
                 data: [{success}, {total - success}],
                 backgroundColor: ['#4CAF50', '#FF6384']
             }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false
         }}
     }});
     </script>
