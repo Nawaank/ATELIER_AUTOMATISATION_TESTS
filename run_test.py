@@ -108,8 +108,58 @@ def run_all_tests():
         "latency_ms": lat,
         "details": details
     })
+    data_ok = None
+    if resp is not None:
+        try:
+            data_ok = resp.json()
+        except Exception:
+            data_ok = None
+
     if lat is not None:
         latencies.append(lat)
+
+    # --- Test contract: timezone attendu
+    if data_ok is None:
+        tests.append({
+            "name": "timezone == Europe/Paris",
+            "status": "FAIL",
+            "latency_ms": None,
+            "details": "No JSON to validate"
+        })
+    else:
+        tz = data_ok.get("timezone")
+        if tz == "Europe/Paris":
+            tests.append({"name": "timezone == Europe/Paris", "status": "PASS", "latency_ms": None, "details": "-"})
+        else:
+            tests.append({"name": "timezone == Europe/Paris", "status": "FAIL", "latency_ms": None, "details": f"Got {tz}"})
+
+    # --- Test contract: champs météo clés (types)
+    if data_ok is None:
+        tests.append({"name": "current_weather types", "status": "FAIL", "latency_ms": None, "details": "No JSON to validate"})
+    else:
+        cw = data_ok.get("current_weather", {})
+        problems = []
+        if not isinstance(cw.get("time"), str):
+            problems.append("time not str")
+        if not isinstance(cw.get("is_day"), int):
+            problems.append("is_day not int")
+        if not isinstance(cw.get("weathercode"), int):
+            problems.append("weathercode not int")
+
+        if problems:
+            tests.append({"name": "current_weather types", "status": "FAIL", "latency_ms": None, "details": "; ".join(problems)})
+        else:
+            tests.append({"name": "current_weather types", "status": "PASS", "latency_ms": None, "details": "-"})
+
+    # --- Test contract: current_weather_units présent
+    if data_ok is None:
+        tests.append({"name": "current_weather_units present", "status": "FAIL", "latency_ms": None, "details": "No JSON to validate"})
+    else:
+        units = data_ok.get("current_weather_units")
+        if isinstance(units, dict) and len(units) > 0:
+            tests.append({"name": "current_weather_units present", "status": "PASS", "latency_ms": None, "details": "-"})
+        else:
+            tests.append({"name": "current_weather_units present", "status": "FAIL", "latency_ms": None, "details": "Missing or not a dict"})
 
     # --- Test latitude invalide (contrat d'erreur)
     # NOTE: abc peut parfois timeout selon infra; on gère ça => FAIL si pas de réponse
