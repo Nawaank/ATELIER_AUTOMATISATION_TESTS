@@ -5,6 +5,7 @@ import os
 # chemin absolu dans ton home sur PythonAnywhere
 DB_FILE = os.path.expanduser("~/results.db")
 
+
 def init_db():
     """Crée la table des runs si elle n'existe pas."""
     conn = sqlite3.connect(DB_FILE)
@@ -23,6 +24,7 @@ def init_db():
     """)
     conn.commit()
     conn.close()
+
 
 def save_run(run_result):
     """Enregistre un run dans la DB."""
@@ -43,11 +45,17 @@ def save_run(run_result):
     conn.commit()
     conn.close()
 
+
 def list_runs(limit=20):
     """Récupère les derniers runs pour le dashboard."""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT timestamp, total_tests, failed_tests, error_rate, latency_avg, latency_p95, tests_json FROM runs ORDER BY id DESC LIMIT ?", (limit,))
+    c.execute("""
+        SELECT timestamp, total_tests, failed_tests, error_rate, latency_avg, latency_p95, tests_json
+        FROM runs
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
     rows = c.fetchall()
     conn.close()
 
@@ -60,23 +68,23 @@ def list_runs(limit=20):
             "error_rate_percent": r[3],
             "latency_avg_ms": r[4],
             "latency_p95_ms": r[5],
-            "tests": json.loads(r[6])
+            "tests": json.loads(r[6]) if r[6] else []
         })
     return runs
+
 
 def get_last_run():
     """Retourne le dernier run, ou un placeholder si aucun."""
     runs = list_runs(limit=1)
     if runs:
         return runs[0]
-    else:
-        # placeholder vide pour éviter les erreurs dans le dashboard
-        return {
-            "timestamp": "N/A",
-            "total_tests": 0,
-            "failed_tests": 0,
-            "error_rate_percent": 0,
-            "latency_avg_ms": 0,
-            "latency_p95_ms": 0,
-            "tests": []
-        }
+
+    return {
+        "timestamp": "N/A",
+        "total_tests": 0,
+        "failed_tests": 0,
+        "error_rate_percent": 0,
+        "latency_avg_ms": 0,
+        "latency_p95_ms": 0,
+        "tests": []
+    }
