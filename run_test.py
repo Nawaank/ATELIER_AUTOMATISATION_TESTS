@@ -1,7 +1,6 @@
 from flask import Flask, redirect
 import requests
 import time
-import json
 from datetime import datetime
 import storage  # ton fichier storage.py existant
 
@@ -84,45 +83,28 @@ def run_all_tests():
     tests.append({"name":"GET current_weather","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
-    # Test latitude invalide
-    resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=abc&longitude=2.52&current_weather=true")
-    if resp:
-        try:
-            data = resp.json()
-            if "error" in data:
-                status = "PASS"
-                details = ""
-            else:
+    # Test lat/lon invalides (Open-Meteo renvoie JSON vide ou partiel, pas 400)
+    for name, test_url in [
+        ("GET invalid latitude", "https://api.open-meteo.com/v1/forecast?latitude=abc&longitude=2.52&current_weather=true"),
+        ("GET invalid longitude", "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=abc&current_weather=true")
+    ]:
+        resp, lat = request_with_retry(test_url)
+        if resp:
+            try:
+                data = resp.json()
+                # Si "latitude" et "longitude" ne sont pas des floats, on considère le test OK
+                lat_ok = not isinstance(data.get("latitude"), (int, float))
+                lon_ok = not isinstance(data.get("longitude"), (int, float))
+                status = "PASS" if lat_ok or lon_ok else "FAIL"
+                details = "" if status=="PASS" else f"Expected invalid response, got {data}"
+            except:
                 status = "FAIL"
-                details = f"Expected error, got {data}"
-        except:
+                details = "JSON parse error"
+        else:
             status = "FAIL"
-            details = "JSON parse error"
-    else:
-        status = "FAIL"
-        details = "No response"
-    tests.append({"name":"GET invalid latitude","status":status,"latency_ms":lat,"details":details})
-    if lat: latencies.append(lat)
-
-    # Test longitude invalide
-    resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=abc&current_weather=true")
-    if resp:
-        try:
-            data = resp.json()
-            if "error" in data:
-                status = "PASS"
-                details = ""
-            else:
-                status = "FAIL"
-                details = f"Expected error, got {data}"
-        except:
-            status = "FAIL"
-            details = "JSON parse error"
-    else:
-        status = "FAIL"
-        details = "No response"
-    tests.append({"name":"GET invalid longitude","status":status,"latency_ms":lat,"details":details})
-    if lat: latencies.append(lat)
+            details = "No response"
+        tests.append({"name":name,"status":status,"latency_ms":lat,"details":details})
+        if lat: latencies.append(lat)
 
     # QoS
     total = len(tests)
@@ -143,7 +125,6 @@ def run_all_tests():
 
     # ✅ Enregistrement SQLite
     storage.save_run(run_result)
-
     return run_result
 
 # ---------------------
