@@ -74,8 +74,8 @@ def dashboard():
     th, td {{ padding: 6px 10px; text-align: center; font-size: 0.9em; }}
     th {{ background-color: #2c3e50; color: white; }}
     tr:nth-child(even) {{ background-color: #e9ecef; }}
-    .charts-container {{ display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }}
-    canvas {{ background-color: #fff; border: 1px solid #ccc; width: 300px !important; height: 200px !important; }}
+    .charts-container {{ display: flex; justify-content: center; gap: 40px; margin-top: 20px; flex-wrap: wrap; }}
+    .chart-box {{ width: 400px; height: 300px; background-color: #fff; border: 1px solid #ccc; padding: 10px; box-sizing: border-box; }}
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
@@ -84,8 +84,12 @@ def dashboard():
     <p>Total tests: {total} | Success: {success} | Availability: {availability}% | Average response time: {avg_time} ms</p>
 
     <div class="charts-container">
-        <canvas id="chart"></canvas>
-        <canvas id="pie"></canvas>
+        <div class="chart-box">
+            <canvas id="chart"></canvas>
+        </div>
+        <div class="chart-box">
+            <canvas id="pie"></canvas>
+        </div>
     </div>
 
     <h2>Derniers tests</h2>
@@ -125,7 +129,8 @@ def dashboard():
         }},
         options: {{
             responsive: true,
-            maintainAspectRatio: false
+            maintainAspectRatio: false,
+            aspectRatio: 1  // Force camembert carré
         }}
     }});
     </script>
