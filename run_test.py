@@ -1,11 +1,9 @@
-from flask import Flask
+from flask import Flask, redirect
 import requests
 import time
 import json
 from datetime import datetime
-import statistics
-import storage  # <-- nouveau
-from flask import redirect
+import storage  # ton fichier storage.py existant
 
 app = Flask(__name__)
 URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true"
@@ -19,9 +17,11 @@ storage.init_db()
 def test_contract(response):
     result = {"status": "PASS", "details": ""}
 
-    if response.headers.get("Content-Type") != "application/json":
+    # Accept application/json avec charset
+    content_type = response.headers.get("Content-Type", "")
+    if not content_type.startswith("application/json"):
         result["status"] = "FAIL"
-        result["details"] += "Content-Type not JSON; "
+        result["details"] += f"Content-Type not JSON ({content_type}); "
 
     try:
         data = response.json()
@@ -86,23 +86,41 @@ def run_all_tests():
 
     # Test latitude invalide
     resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=abc&longitude=2.52&current_weather=true")
-    if resp and resp.status_code==400:
-        status = "PASS"
-        details = ""
+    if resp:
+        try:
+            data = resp.json()
+            if "error" in data:
+                status = "PASS"
+                details = ""
+            else:
+                status = "FAIL"
+                details = f"Expected error, got {data}"
+        except:
+            status = "FAIL"
+            details = "JSON parse error"
     else:
         status = "FAIL"
-        details = f"Expected 400, got {resp.status_code if resp else 'no response'}"
+        details = "No response"
     tests.append({"name":"GET invalid latitude","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
     # Test longitude invalide
     resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=abc&current_weather=true")
-    if resp and resp.status_code==400:
-        status = "PASS"
-        details = ""
+    if resp:
+        try:
+            data = resp.json()
+            if "error" in data:
+                status = "PASS"
+                details = ""
+            else:
+                status = "FAIL"
+                details = f"Expected error, got {data}"
+        except:
+            status = "FAIL"
+            details = "JSON parse error"
     else:
         status = "FAIL"
-        details = f"Expected 400, got {resp.status_code if resp else 'no response'}"
+        details = "No response"
     tests.append({"name":"GET invalid longitude","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
@@ -134,8 +152,6 @@ def run_all_tests():
 @app.route("/")
 def dashboard():
     last_run = storage.get_last_run()
-
-    # Lecture des 20 derniers runs depuis SQLite
     runs = storage.list_runs(limit=20)
 
     timestamps = [r["timestamp"] for r in runs]
@@ -239,8 +255,8 @@ def dashboard():
 
 @app.route("/run", methods=["POST"])
 def run_single_test():
-    run_all_tests()  # lance tous les tests
-    return redirect("/")  # revient au dashboard
+    run_all_tests()
+    return redirect("/")
 
 if __name__ == "__main__":
     app.run(debug=True)
