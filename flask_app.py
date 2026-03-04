@@ -3,10 +3,17 @@ import requests
 import time
 import json
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 
 URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true"
+RESULT_FILE = "results.json"
+
+# S'assure que le fichier results.json existe
+if not os.path.exists(RESULT_FILE):
+    with open(RESULT_FILE, "w") as f:
+        f.write("")
 
 def test_api():
     start = time.time()
@@ -31,28 +38,30 @@ def test_api():
             "success": False
         }
 
-    with open("results.json", "a") as f:
-        f.write(json.dumps(result) + "\n")
+    try:
+        with open(RESULT_FILE, "a") as f:
+            f.write(json.dumps(result) + "\n")
+    except:
+        pass
 
     return result
 
-
 @app.route("/")
 def dashboard():
-    # On exécute un test à chaque visite
+    # Test API à chaque visite
     test_api()
 
     try:
-        with open("results.json", "r") as f:
+        with open(RESULT_FILE, "r") as f:
             lines = f.readlines()
-            data = [json.loads(line) for line in lines]
+            data = [json.loads(line) for line in lines if line.strip()]
     except:
         data = []
 
     total = len(data)
-    success = len([d for d in data if d["success"]])
+    success = len([d for d in data if d.get("success")])
     avg_time = round(
-        sum(d["response_time_ms"] for d in data if d["response_time_ms"]) / success,
+        sum(d.get("response_time_ms", 0) for d in data if d.get("response_time_ms") is not None) / success,
         2
     ) if success > 0 else 0
 
