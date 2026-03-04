@@ -59,7 +59,7 @@ def dashboard():
     )
     table_html = f"<table><tr><th>Timestamp</th><th>Status</th><th>Response Time (ms)</th></tr>{table_rows}</table>"
 
-    # Graphique temps de réponse et camembert
+    # Graphiques des 20 derniers tests
     timestamps = [d['timestamp'] for d in data[-20:]]
     response_times = [d['response_time_ms'] or 0 for d in data[-20:]]
 
@@ -68,25 +68,25 @@ def dashboard():
     <head>
     <title>API Monitoring - Open Meteo</title>
     <style>
-    body {{ font-family: Arial; background-color: #f4f4f9; color: #333; }}
+    body {{ font-family: Arial; background-color: #f4f4f9; color: #333; text-align: center; }}
     h1 {{ color: #2c3e50; }}
-    table {{ border-collapse: collapse; width: 80%; margin-top: 20px; }}
+    table {{ border-collapse: collapse; width: 80%; margin: 20px auto; }}
     th, td {{ padding: 8px 12px; text-align: center; }}
     th {{ background-color: #2c3e50; color: white; }}
     tr:nth-child(even) {{ background-color: #e9ecef; }}
-    canvas {{ margin: 20px 0; }}
+    .charts-container {{ display: flex; justify-content: center; gap: 40px; margin-top: 20px; flex-wrap: wrap; }}
+    canvas {{ background-color: #fff; border: 1px solid #ccc; }}
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body>
     <h1>API Monitoring - Open Meteo</h1>
-    <p>Total tests: {total}</p>
-    <p>Success: {success}</p>
-    <p>Availability: {availability}%</p>
-    <p>Average response time: {avg_time} ms</p>
+    <p>Total tests: {total} | Success: {success} | Availability: {availability}% | Average response time: {avg_time} ms</p>
 
-    <canvas id="chart" width="600" height="300"></canvas>
-    <canvas id="pie" width="300" height="300"></canvas>
+    <div class="charts-container">
+        <canvas id="chart" width="400" height="250"></canvas>
+        <canvas id="pie" width="400" height="250"></canvas>
+    </div>
 
     <h2>Derniers tests</h2>
     {table_html}
@@ -101,6 +101,7 @@ def dashboard():
                 label: 'Response Time (ms)',
                 data: {response_times},
                 borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 tension: 0.3
             }}]
         }},
