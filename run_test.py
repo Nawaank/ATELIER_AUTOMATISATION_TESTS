@@ -4,22 +4,19 @@ import time
 import json
 from datetime import datetime
 import statistics
+import storage  # <-- nouveau
+from flask import redirect
 
 app = Flask(__name__)
-
 URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true"
+
+# Initialisation de la DB
+storage.init_db()
 
 # ---------------------
 # Étape 1 : Contrat
 # ---------------------
 def test_contract(response):
-    """
-    Vérifie le contrat de l'API Open-Meteo :
-    - status 200
-    - Content-Type JSON
-    - champs obligatoires présents
-    - types des champs
-    """
     result = {"status": "PASS", "details": ""}
 
     if response.headers.get("Content-Type") != "application/json":
@@ -87,7 +84,7 @@ def run_all_tests():
     tests.append({"name":"GET current_weather","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
-    # Test avec latitude invalide
+    # Test latitude invalide
     resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=abc&longitude=2.52&current_weather=true")
     if resp and resp.status_code==400:
         status = "PASS"
@@ -98,7 +95,7 @@ def run_all_tests():
     tests.append({"name":"GET invalid latitude","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
-    # Test avec longitude invalide
+    # Test longitude invalide
     resp, lat = request_with_retry("https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=abc&current_weather=true")
     if resp and resp.status_code==400:
         status = "PASS"
@@ -109,7 +106,7 @@ def run_all_tests():
     tests.append({"name":"GET invalid longitude","status":status,"latency_ms":lat,"details":details})
     if lat: latencies.append(lat)
 
-    # QoS / latence et réussite
+    # QoS
     total = len(tests)
     failed = len([t for t in tests if t["status"]=="FAIL"])
     lat_avg = round(sum(latencies)/len(latencies),2) if latencies else 0
@@ -126,8 +123,8 @@ def run_all_tests():
         "tests": tests
     }
 
-    with open("results.json","a") as f:
-        f.write(json.dumps(run_result)+"\n")
+    # ✅ Enregistrement SQLite
+    storage.save_run(run_result)
 
     return run_result
 
@@ -136,21 +133,16 @@ def run_all_tests():
 # ---------------------
 @app.route("/")
 def dashboard():
-    last_run = run_all_tests()  # lance tous les tests à chaque visite
+    last_run = storage.get_last_run()
 
-    # Lecture des 20 derniers runs pour graphiques
-    try:
-        with open("results.json","r") as f:
-            lines = f.readlines()
-            runs = [json.loads(line) for line in lines]
-    except:
-        runs = []
+    # Lecture des 20 derniers runs depuis SQLite
+    runs = storage.list_runs(limit=20)
 
-    timestamps = [r["timestamp"] for r in runs[-20:]]
-    lat_avgs = [r.get("latency_avg_ms",0) for r in runs[-20:]]
-    error_rates = [r.get("error_rate_percent",0) for r in runs[-20:]]
-    successes = [r["total_tests"] - r["failed_tests"] for r in runs[-20:]]
-    failures = [r["failed_tests"] for r in runs[-20:]]
+    timestamps = [r["timestamp"] for r in runs]
+    lat_avgs = [r.get("latency_avg_ms",0) for r in runs]
+    error_rates = [r.get("error_rate_percent",0) for r in runs]
+    successes = [r["total_tests"] - r["failed_tests"] for r in runs]
+    failures = [r["failed_tests"] for r in runs]
 
     # Tableau du dernier run
     table_rows = ""
@@ -180,19 +172,16 @@ def dashboard():
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
     <body>
+        <form method="POST" action="/run">
+            <button type="submit">Relancer un test</button>
+        </form>
         <h1>API Monitoring - Open Meteo</h1>
         <p>Dernier run: {last_run['timestamp']} | Total: {last_run['total_tests']} | Failed: {last_run['failed_tests']} | Error rate: {last_run['error_rate_percent']}% | Lat Avg: {last_run['latency_avg_ms']} ms | Lat P95: {last_run['latency_p95_ms']} ms</p>
 
         <div class="charts-container">
-            <div class="chart-box">
-                <canvas id="latencyChart"></canvas>
-            </div>
-            <div class="chart-box">
-                <canvas id="errorChart"></canvas>
-            </div>
-            <div class="chart-box">
-                <canvas id="pieChart"></canvas>
-            </div>
+            <div class="chart-box"><canvas id="latencyChart"></canvas></div>
+            <div class="chart-box"><canvas id="errorChart"></canvas></div>
+            <div class="chart-box"><canvas id="pieChart"></canvas></div>
         </div>
 
         <h2>Détails du dernier run</h2>
@@ -237,7 +226,7 @@ def dashboard():
                 data: {{
                     labels: ['Success', 'Failed'],
                     datasets: [{{
-                        data: [{successes[-1:] + failures[-1:] if successes else [0,0]}],
+                        data: [{successes[-1] if successes else 0},{failures[-1] if failures else 0}],
                         backgroundColor: ['#4CAF50','#FF6384']
                     }}]
                 }},
@@ -247,6 +236,11 @@ def dashboard():
     </body>
     </html>
     """
+
+@app.route("/run", methods=["POST"])
+def run_single_test():
+    run_all_tests()  # lance tous les tests
+    return redirect("/")  # revient au dashboard
 
 if __name__ == "__main__":
     app.run(debug=True)
