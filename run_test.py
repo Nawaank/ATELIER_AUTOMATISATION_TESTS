@@ -108,6 +108,7 @@ def run_all_tests():
         "latency_ms": lat,
         "details": details
     })
+
     data_ok = None
     if resp is not None:
         try:
@@ -120,12 +121,7 @@ def run_all_tests():
 
     # --- Test contract: timezone attendu
     if data_ok is None:
-        tests.append({
-            "name": "timezone == Europe/Paris",
-            "status": "FAIL",
-            "latency_ms": None,
-            "details": "No JSON to validate"
-        })
+        tests.append({"name": "timezone == Europe/Paris", "status": "FAIL", "latency_ms": None, "details": "No JSON to validate"})
     else:
         tz = data_ok.get("timezone")
         if tz == "Europe/Paris":
@@ -162,7 +158,6 @@ def run_all_tests():
             tests.append({"name": "current_weather_units present", "status": "FAIL", "latency_ms": None, "details": "Missing or not a dict"})
 
     # --- Test latitude invalide (contrat d'erreur)
-    # NOTE: abc peut parfois timeout selon infra; on gère ça => FAIL si pas de réponse
     invalid_lat_url = (
         "https://api.open-meteo.com/v1/forecast"
         "?latitude=abc&longitude=2.52&current_weather=true&timezone=Europe/Paris"
@@ -178,7 +173,6 @@ def run_all_tests():
         except Exception:
             data = {}
 
-        # Contrat attendu : erreur (status >= 400) et/ou JSON error/reason
         if resp.status_code >= 400 or data.get("error") is True or ("reason" in data):
             status = "PASS"
             details = f"Expected error: status_code={resp.status_code}"
@@ -289,22 +283,23 @@ def dashboard():
     lat_avgs_js = json.dumps(lat_avgs)
     error_rates_js = json.dumps(error_rates)
 
-    # Tableau du dernier run
+    # Tableau du dernier run (avec badges)
     table_rows = ""
     for t in last_run["tests"]:
+        badge = "pass" if t["status"] == "PASS" else "fail"
         table_rows += (
             f"<tr>"
             f"<td>{t['name']}</td>"
-            f"<td>{t['status']}</td>"
+            f"<td><span class='badge {badge}'>{t['status']}</span></td>"
             f"<td>{t.get('latency_ms') if t.get('latency_ms') is not None else '-'}</td>"
-            f"<td>{t.get('details') or '-'}</td>"
+            f"<td class='muted'>{t.get('details') or '-'}</td>"
             f"</tr>"
         )
 
     table_html = f"""
     <table>
-        <tr><th>Test Name</th><th>Status</th><th>Latency (ms)</th><th>Details</th></tr>
-        {table_rows}
+      <tr><th>Test Name</th><th>Status</th><th>Latency (ms)</th><th>Details</th></tr>
+      {table_rows}
     </table>
     """
 
@@ -339,66 +334,252 @@ def dashboard():
     return f"""
     <html>
     <head>
-        <title>API Monitoring - Open Meteo</title>
-        <style>
-            body {{ font-family: Arial; background-color: #f4f4f9; color: #333; text-align: center; }}
-            h1 {{ color: #2c3e50; }}
-            table {{ border-collapse: collapse; width: 90%; margin: 20px auto; }}
-            th, td {{ padding: 6px 10px; text-align: center; font-size: 0.9em; }}
-            th {{ background-color: #2c3e50; color: white; }}
-            tr:nth-child(even) {{ background-color: #e9ecef; }}
+      <title>API Monitoring - Open Meteo</title>
+      <style>
+        :root {{
+          --bg: #0b1220;
+          --panel: rgba(255,255,255,.06);
+          --border: rgba(255,255,255,.10);
+          --text: rgba(255,255,255,.92);
+          --muted: rgba(255,255,255,.70);
+          --shadow: 0 16px 40px rgba(0,0,0,.35);
+          --radius: 16px;
+        }}
 
-            .charts-container {{
-                display: flex;
-                justify-content: center;
-                align-items: flex-start;
-                gap: 28px;
-                margin-top: 20px;
-                flex-wrap: wrap;
-            }}
+        * {{ box-sizing: border-box; }}
 
-            .chart-box {{
-                width: 520px;
-                height: 320px;
-                background-color: #fff;
-                border: 1px solid #ccc;
-                padding: 10px;
-                box-sizing: border-box;
-                border-radius: 10px;
-            }}
+        body {{
+          margin: 0;
+          font-family: Inter, Arial, sans-serif;
+          background:
+            radial-gradient(1000px 500px at 10% 10%, rgba(79,70,229,.35), transparent 55%),
+            radial-gradient(900px 500px at 90% 20%, rgba(16,185,129,.18), transparent 55%),
+            radial-gradient(900px 500px at 50% 90%, rgba(59,130,246,.16), transparent 55%),
+            var(--bg);
+          color: var(--text);
+        }}
 
-            .chart-box.pie {{
-                width: 340px;
-                height: 340px;
-            }}
+        .container {{
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 28px 18px 40px;
+        }}
 
-            canvas {{
-                width: 100% !important;
-                height: 100% !important;
-            }}
-        </style>
+        .topbar {{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+        }}
 
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        h1 {{
+          margin: 0;
+          font-size: 22px;
+          letter-spacing: .2px;
+        }}
+
+        .sub {{
+          margin: 8px 0 0;
+          color: var(--muted);
+          font-size: 13px;
+        }}
+
+        .card {{
+          background: linear-gradient(180deg, var(--panel), rgba(255,255,255,.04));
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          box-shadow: var(--shadow);
+        }}
+
+        .card.pad {{
+          padding: 16px;
+        }}
+
+        .kpis {{
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          gap: 12px;
+        }}
+
+        .kpi {{
+          padding: 12px 12px;
+          border-radius: 14px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,.05);
+        }}
+
+        .kpi .label {{
+          color: var(--muted);
+          font-size: 12px;
+          margin-bottom: 6px;
+        }}
+
+        .kpi .value {{
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: .2px;
+        }}
+
+        .run-btn {{
+          background: linear-gradient(135deg, #4f46e5, #3b82f6);
+          color: white;
+          border: none;
+          padding: 12px 18px;
+          font-size: 14px;
+          font-weight: 700;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: transform .08s ease, box-shadow .2s ease, filter .2s ease;
+          box-shadow: 0 10px 24px rgba(79,70,229,.35);
+          white-space: nowrap;
+        }}
+
+        .run-btn:hover {{
+          filter: brightness(1.06);
+          box-shadow: 0 14px 30px rgba(79,70,229,.42);
+          transform: translateY(-1px);
+        }}
+
+        .run-btn:active {{
+          transform: translateY(1px);
+          box-shadow: 0 8px 18px rgba(79,70,229,.32);
+        }}
+
+        .run-btn:focus {{
+          outline: 3px solid rgba(99,102,241,.35);
+          outline-offset: 3px;
+        }}
+
+        .charts-container {{
+          display: grid;
+          grid-template-columns: 1.4fr 1.4fr .9fr;
+          gap: 12px;
+          margin-top: 12px;
+        }}
+
+        .chart-box {{
+          height: 320px;
+          padding: 12px;
+        }}
+
+        .chart-title {{
+          color: var(--muted);
+          font-size: 12px;
+          margin: 0 0 8px;
+        }}
+
+        canvas {{
+          width: 100% !important;
+          height: calc(100% - 18px) !important;
+        }}
+
+        h2 {{
+          margin: 18px 0 10px;
+          font-size: 16px;
+          color: rgba(255,255,255,.88);
+        }}
+
+        table {{
+          width: 100%;
+          border-collapse: collapse;
+          overflow: hidden;
+          border-radius: 14px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,.04);
+        }}
+
+        th, td {{
+          padding: 10px 10px;
+          font-size: 13px;
+          text-align: left;
+          border-bottom: 1px solid rgba(255,255,255,.08);
+        }}
+
+        th {{
+          color: rgba(255,255,255,.85);
+          background: rgba(255,255,255,.06);
+          font-weight: 700;
+        }}
+
+        tr:hover td {{
+          background: rgba(255,255,255,.05);
+        }}
+
+        .badge {{
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: .2px;
+          border: 1px solid rgba(255,255,255,.12);
+        }}
+
+        .badge.pass {{
+          background: rgba(16,185,129,.16);
+          color: #a7f3d0;
+          border-color: rgba(16,185,129,.22);
+        }}
+
+        .badge.fail {{
+          background: rgba(239,68,68,.16);
+          color: #fecaca;
+          border-color: rgba(239,68,68,.22);
+        }}
+
+        .muted {{
+          color: var(--muted);
+        }}
+
+        @media (max-width: 980px) {{
+          .kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+          .charts-container {{ grid-template-columns: 1fr; }}
+          .chart-box {{ height: 300px; }}
+        }}
+      </style>
+
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     </head>
-    <body>
-        <form method="POST" action="/run">
-            <button type="submit">Relancer un test</button>
-        </form>
 
-        <h1>API Monitoring - Open Meteo</h1>
-        <p>
-          Dernier run: {last_run['timestamp']} |
-          Total: {last_run['total_tests']} |
-          Failed: {last_run['failed_tests']} |
-          Error rate: {last_run['error_rate_percent']}% |
-          Lat Avg: {last_run['latency_avg_ms']} ms |
-          Lat P95: {last_run['latency_p95_ms']} ms
-        </p>
+    <body>
+      <div class="container">
+        <div class="topbar">
+          <div>
+            <h1>API Monitoring — Open Meteo</h1>
+            <p class="sub">Dernier run : <b>{last_run['timestamp']}</b></p>
+          </div>
+
+          <form method="POST" action="/run">
+            <button class="run-btn" type="submit">▶ Relancer un test</button>
+          </form>
+        </div>
+
+        <div class="card pad">
+          <div class="kpis">
+            <div class="kpi"><div class="label">Total tests</div><div class="value">{last_run['total_tests']}</div></div>
+            <div class="kpi"><div class="label">Échecs</div><div class="value">{last_run['failed_tests']}</div></div>
+            <div class="kpi"><div class="label">Error rate</div><div class="value">{last_run['error_rate_percent']}%</div></div>
+            <div class="kpi"><div class="label">Latence moyenne</div><div class="value">{last_run['latency_avg_ms']} ms</div></div>
+            <div class="kpi"><div class="label">Latence p95</div><div class="value">{last_run['latency_p95_ms']} ms</div></div>
+          </div>
+        </div>
 
         <div class="charts-container">
-            <div class="chart-box"><canvas id="latencyChart"></canvas></div>
-            <div class="chart-box"><canvas id="errorChart"></canvas></div>
-            <div class="chart-box pie"><canvas id="pieChart"></canvas></div>
+          <div class="card chart-box">
+            <p class="chart-title">Latence moyenne (ms)</p>
+            <canvas id="latencyChart"></canvas>
+          </div>
+
+          <div class="card chart-box">
+            <p class="chart-title">Taux d'erreur (%)</p>
+            <canvas id="errorChart"></canvas>
+          </div>
+
+          <div class="card chart-box">
+            <p class="chart-title">Dernier run : Success vs Failed</p>
+            <canvas id="pieChart"></canvas>
+          </div>
         </div>
 
         <h2>Détails du dernier run</h2>
@@ -408,63 +589,64 @@ def dashboard():
         {history_table_html}
 
         <script>
-            const labels = {timestamps_js};
-            const latData = {lat_avgs_js};
-            const errData = {error_rates_js};
+          const labels = {timestamps_js};
+          const latData = {lat_avgs_js};
+          const errData = {error_rates_js};
 
-            new Chart(document.getElementById('latencyChart'), {{
-                type: 'line',
-                data: {{
-                    labels: labels,
-                    datasets: [{{
-                        label: 'Latence moyenne (ms)',
-                        data: latData,
-                        tension: 0.3,
-                        pointRadius: 2
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {{ y: {{ beginAtZero: true }} }}
-                }}
-            }});
+          new Chart(document.getElementById('latencyChart'), {{
+            type: 'line',
+            data: {{
+              labels: labels,
+              datasets: [{{
+                label: 'Latence moyenne (ms)',
+                data: latData,
+                tension: 0.3,
+                pointRadius: 2
+              }}]
+            }},
+            options: {{
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {{ y: {{ beginAtZero: true }} }}
+            }}
+          }});
 
-            new Chart(document.getElementById('errorChart'), {{
-                type: 'line',
-                data: {{
-                    labels: labels,
-                    datasets: [{{
-                        label: "Taux d'erreur (%)",
-                        data: errData,
-                        tension: 0.3,
-                        pointRadius: 2
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {{ y: {{ beginAtZero: true }} }}
-                }}
-            }});
+          new Chart(document.getElementById('errorChart'), {{
+            type: 'line',
+            data: {{
+              labels: labels,
+              datasets: [{{
+                label: "Taux d'erreur (%)",
+                data: errData,
+                tension: 0.3,
+                pointRadius: 2
+              }}]
+            }},
+            options: {{
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {{ y: {{ beginAtZero: true }} }}
+            }}
+          }});
 
-            new Chart(document.getElementById('pieChart'), {{
-                type: 'pie',
-                data: {{
-                    labels: ['Success', 'Failed'],
-                    datasets: [{{
-                        data: [{last_success}, {last_fail}]
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {{
-                        legend: {{ position: 'bottom' }}
-                    }}
-                }}
-            }});
+          new Chart(document.getElementById('pieChart'), {{
+            type: 'pie',
+            data: {{
+              labels: ['Success', 'Failed'],
+              datasets: [{{
+                data: [{last_success}, {last_fail}]
+              }}]
+            }},
+            options: {{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {{
+                legend: {{ position: 'bottom' }}
+              }}
+            }}
+          }});
         </script>
+      </div>
     </body>
     </html>
     """
