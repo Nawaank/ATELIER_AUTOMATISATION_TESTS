@@ -1,7 +1,9 @@
 import sqlite3
-from datetime import datetime
+import json
+import os
 
-DB_FILE = "results.db"
+# chemin absolu dans ton home sur PythonAnywhere
+DB_FILE = os.path.expanduser("~/results.db")
 
 def init_db():
     """Crée la table des runs si elle n'existe pas."""
@@ -61,3 +63,20 @@ def list_runs(limit=20):
             "tests": json.loads(r[6])
         })
     return runs
+
+def get_last_run():
+    """Retourne le dernier run, ou un placeholder si aucun."""
+    runs = list_runs(limit=1)
+    if runs:
+        return runs[0]
+    else:
+        # placeholder vide pour éviter les erreurs dans le dashboard
+        return {
+            "timestamp": "N/A",
+            "total_tests": 0,
+            "failed_tests": 0,
+            "error_rate_percent": 0,
+            "latency_avg_ms": 0,
+            "latency_p95_ms": 0,
+            "tests": []
+        }
