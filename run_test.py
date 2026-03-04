@@ -7,10 +7,12 @@ import storage  # ton fichier storage.py
 
 app = Flask(__name__)
 
-URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true"
+# URL "valide" (cohérente avec ce que tu testes dans le navigateur)
+URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true&timezone=Europe/Paris"
 
 # Initialisation DB
 storage.init_db()
+
 
 # ---------------------
 # Étape 1 : Contrat
@@ -26,6 +28,7 @@ def test_contract(response):
 
     try:
         data = response.json()
+
         required_fields = ["latitude", "longitude", "current_weather"]
         for field in required_fields:
             if field not in data:
@@ -58,7 +61,6 @@ def request_with_retry(url, retries=1, timeout=3):
     - 429 -> petite attente
     - 5xx -> retry
     """
-    last_exc = None
     for attempt in range(retries + 1):
         try:
             start = time.time()
@@ -75,8 +77,7 @@ def request_with_retry(url, retries=1, timeout=3):
 
             return response, latency
 
-        except requests.exceptions.RequestException as e:
-            last_exc = e
+        except requests.exceptions.RequestException:
             if attempt == retries:
                 return None, None
             time.sleep(1)
@@ -91,15 +92,15 @@ def run_all_tests():
     tests = []
     latencies = []
 
-    # --- Test principal
+    # --- Test principal (contrat)
     resp, lat = request_with_retry(URL)
-    if resp:
+    if resp is not None:
         contract = test_contract(resp)
         status = "PASS" if contract["status"] == "PASS" else "FAIL"
-        details = contract["details"]
+        details = contract["details"] or "-"
     else:
         status = "FAIL"
-        details = "Request failed"
+        details = "Request failed (timeout/retry)"
 
     tests.append({
         "name": "GET current_weather",
@@ -110,18 +111,32 @@ def run_all_tests():
     if lat is not None:
         latencies.append(lat)
 
-    # --- Test latitude invalide (non destructif)
-    resp, lat = request_with_retry(
-        "https://api.open-meteo.com/v1/forecast?latitude=abc&longitude=2.52&current_weather=true"
+    # --- Test latitude invalide (contrat d'erreur)
+    # NOTE: abc peut parfois timeout selon infra; on gère ça => FAIL si pas de réponse
+    invalid_lat_url = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=abc&longitude=2.52&current_weather=true&timezone=Europe/Paris"
     )
-    if resp:
-        # On veut juste éviter que ça "plante"
-        # (tu peux rendre ça plus strict si tu veux)
-        status = "PASS"
-        details = f"status_code={resp.status_code}"
+    resp, lat = request_with_retry(invalid_lat_url)
+
+    if resp is None:
+        status = "FAIL"
+        details = "No response (timeout/retry) -> cannot validate expected error"
     else:
-        status = "PASS"
-        details = "No response (treated as PASS for invalid input)"
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+
+        # Contrat attendu : erreur (status >= 400) et/ou JSON error/reason
+        if resp.status_code >= 400 or data.get("error") is True or ("reason" in data):
+            status = "PASS"
+            details = f"Expected error: status_code={resp.status_code}"
+            if "reason" in data:
+                details += f" | reason={data.get('reason')}"
+        else:
+            status = "FAIL"
+            details = f"Unexpected success: status_code={resp.status_code}"
 
     tests.append({
         "name": "GET invalid latitude",
@@ -132,16 +147,30 @@ def run_all_tests():
     if lat is not None:
         latencies.append(lat)
 
-    # --- Test longitude invalide (non destructif)
-    resp, lat = request_with_retry(
-        "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=abc&current_weather=true"
+    # --- Test longitude invalide (contrat d'erreur)
+    invalid_lon_url = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=48.77&longitude=abc&current_weather=true&timezone=Europe/Paris"
     )
-    if resp:
-        status = "PASS"
-        details = f"status_code={resp.status_code}"
+    resp, lat = request_with_retry(invalid_lon_url)
+
+    if resp is None:
+        status = "FAIL"
+        details = "No response (timeout/retry) -> cannot validate expected error"
     else:
-        status = "PASS"
-        details = "No response (treated as PASS for invalid input)"
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+
+        if resp.status_code >= 400 or data.get("error") is True or ("reason" in data):
+            status = "PASS"
+            details = f"Expected error: status_code={resp.status_code}"
+            if "reason" in data:
+                details += f" | reason={data.get('reason')}"
+        else:
+            status = "FAIL"
+            details = f"Unexpected success: status_code={resp.status_code}"
 
     tests.append({
         "name": "GET invalid longitude",
@@ -197,7 +226,7 @@ def dashboard():
     lat_avgs = [r.get("latency_avg_ms", 0) for r in runs]
     error_rates = [r.get("error_rate_percent", 0) for r in runs]
 
-    # pie = dernier run (le plus récent)
+    # pie = dernier run
     if runs:
         last_success = runs[-1]["total_tests"] - runs[-1]["failed_tests"]
         last_fail = runs[-1]["failed_tests"]
@@ -229,7 +258,7 @@ def dashboard():
     </table>
     """
 
-    # ✅ Historique (20 derniers runs)
+    # Historique (20 derniers runs)
     history_rows = ""
     for r in runs:
         history_rows += (
@@ -389,6 +418,8 @@ def dashboard():
     </body>
     </html>
     """
+
+
 # Alias demandé par l’énoncé
 @app.route("/dashboard")
 def dashboard_alias():
