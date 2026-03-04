@@ -190,7 +190,7 @@ def dashboard():
     last_run = storage.get_last_run()
     runs = storage.list_runs(limit=20)
 
-    # On veut afficher ancien -> récent
+    # ancien -> récent
     runs = list(reversed(runs))
 
     timestamps = [r["timestamp"] for r in runs]
@@ -229,6 +229,34 @@ def dashboard():
     </table>
     """
 
+    # ✅ Historique (20 derniers runs)
+    history_rows = ""
+    for r in runs:
+        history_rows += (
+            "<tr>"
+            f"<td>{r['timestamp']}</td>"
+            f"<td>{r['total_tests']}</td>"
+            f"<td>{r['failed_tests']}</td>"
+            f"<td>{r['error_rate_percent']}%</td>"
+            f"<td>{r['latency_avg_ms']}</td>"
+            f"<td>{r['latency_p95_ms']}</td>"
+            "</tr>"
+        )
+
+    history_table_html = f"""
+    <table>
+      <tr>
+        <th>Timestamp</th>
+        <th>Total</th>
+        <th>Failed</th>
+        <th>Error rate</th>
+        <th>Lat avg (ms)</th>
+        <th>Lat p95 (ms)</th>
+      </tr>
+      {history_rows}
+    </table>
+    """
+
     return f"""
     <html>
     <head>
@@ -250,7 +278,6 @@ def dashboard():
                 flex-wrap: wrap;
             }}
 
-            /* Courbes plus grosses */
             .chart-box {{
                 width: 520px;
                 height: 320px;
@@ -261,13 +288,11 @@ def dashboard():
                 border-radius: 10px;
             }}
 
-            /* Pie carré => pas aplati */
             .chart-box.pie {{
                 width: 340px;
                 height: 340px;
             }}
 
-            /* Force le canvas à remplir son conteneur */
             canvas {{
                 width: 100% !important;
                 height: 100% !important;
@@ -299,6 +324,9 @@ def dashboard():
 
         <h2>Détails du dernier run</h2>
         {table_html}
+
+        <h2>Historique (20 derniers runs)</h2>
+        {history_table_html}
 
         <script>
             const labels = {timestamps_js};
@@ -361,8 +389,6 @@ def dashboard():
     </body>
     </html>
     """
-
-
 # Alias demandé par l’énoncé
 @app.route("/dashboard")
 def dashboard_alias():
