@@ -8,18 +8,62 @@ app = Flask(__name__)
 
 URL = "https://api.open-meteo.com/v1/forecast?latitude=48.77&longitude=2.52&current_weather=true"
 
+def test_contract(response):
+    """
+    Vérifie le contrat de l'API Open-Meteo :
+    - status 200
+    - Content-Type JSON
+    - champs obligatoires présents
+    - types des champs
+    """
+    result = {"status": "PASS", "details": ""}
+
+    # Vérifier Content-Type
+    if response.headers.get("Content-Type") != "application/json":
+        result["status"] = "FAIL"
+        result["details"] += "Content-Type not JSON; "
+
+    try:
+        data = response.json()
+
+        # Vérifier champs obligatoires
+        required_fields = ["latitude", "longitude", "current_weather"]
+        for field in required_fields:
+            if field not in data:
+                result["status"] = "FAIL"
+                result["details"] += f"Missing field: {field}; "
+
+        # Vérifier types
+        if "current_weather" in data:
+            cw = data["current_weather"]
+            if not isinstance(cw.get("temperature"), (int, float)):
+                result["status"] = "FAIL"
+                result["details"] += "temperature type incorrect; "
+            if not isinstance(cw.get("windspeed"), (int, float)):
+                result["status"] = "FAIL"
+                result["details"] += "windspeed type incorrect; "
+
+    except Exception as e:
+        result["status"] = "FAIL"
+        result["details"] += f"JSON parse error: {e}; "
+
+    return result
+
 def test_api():
     start = time.time()
     try:
         response = requests.get(URL, timeout=5)
+        contract_result = test_contract(response)
         response_time = round((time.time() - start) * 1000, 2)
         success = response.status_code == 200
         result = {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "status_code": response.status_code,
-            "response_time_ms": response_time,
-            "success": success
-        }
+               "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+               "status_code": response.status_code,
+               "response_time_ms": response_time,
+               "success": success,
+               "contract_status": contract_result["status"],
+               "contract_details": contract_result["details"]
+            }
     except:
         result = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -137,3 +181,6 @@ def dashboard():
     </body>
     </html>
     """
+
+
+
